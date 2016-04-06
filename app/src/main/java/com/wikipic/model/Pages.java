@@ -2,7 +2,9 @@ package com.wikipic.model;
 
 import com.google.gson.annotations.SerializedName;
 
-public class Pages {
+import java.io.Serializable;
+
+public class Pages implements Serializable {
 
     @SerializedName("index")
     private String mIndex;

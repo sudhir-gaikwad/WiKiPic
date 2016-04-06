@@ -4,7 +4,9 @@ import android.text.TextUtils;
 
 import com.google.gson.annotations.SerializedName;
 
-public class Thumbnail {
+import java.io.Serializable;
+
+public class Thumbnail implements Serializable {
 
     @SerializedName("height")
     private String mHeight;

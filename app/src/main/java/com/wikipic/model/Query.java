@@ -2,7 +2,9 @@ package com.wikipic.model;
 
 import com.google.gson.annotations.SerializedName;
 
-public class Query {
+import java.io.Serializable;
+
+public class Query implements Serializable {
 
     @SerializedName("pages")
     private Pages[] mPages;

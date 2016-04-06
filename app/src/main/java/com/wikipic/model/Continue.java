@@ -2,7 +2,9 @@ package com.wikipic.model;
 
 import com.google.gson.annotations.SerializedName;
 
-public class Continue {
+import java.io.Serializable;
+
+public class Continue implements Serializable {
 
     @SerializedName("gpsoffset")
     private String mGpsoffset;

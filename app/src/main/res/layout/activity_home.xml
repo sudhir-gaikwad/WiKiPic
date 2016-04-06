@@ -49,20 +49,16 @@
             android:orientation="vertical"
             android:visibility="gone">
 
-            <GridView
+            <android.support.v7.widget.RecyclerView
                 android:id="@+id/grid_view"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:columnWidth="@dimen/image_size"
-                android:horizontalSpacing="@dimen/image_spacing"
-                android:numColumns="auto_fit"
                 android:paddingBottom="@dimen/grid_view_padding_top_bottom"
                 android:paddingLeft="@dimen/grid_view_padding_left_right"
                 android:paddingRight="@dimen/grid_view_padding_left_right"
                 android:paddingTop="@dimen/grid_view_padding_top_bottom"
                 android:scrollbars="none"
-                android:stretchMode="columnWidth"
-                android:verticalSpacing="@dimen/image_spacing"
+
                 />
         </LinearLayout>
 

@@ -1,18 +1,19 @@
 package com.wikipic.activity;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.text.Editable;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.View;
 import android.view.ViewTreeObserver;
-import android.widget.AdapterView;
 import android.widget.EditText;
-import android.widget.GridView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -27,13 +28,14 @@ import com.wikipic.util.Constants;
 import com.wikipic.util.LogUtil;
 import com.wikipic.util.NetworkUtils;
 import com.wikipic.util.PageComparator;
+import com.wikipic.util.Utils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-public class HomeActivity extends AppCompatActivity implements AdapterView.OnItemClickListener {
+public class HomeActivity extends AppCompatActivity implements OnItemClickListener {
 
     private static final String TAG = HomeActivity.class.getSimpleName();
 
@@ -45,6 +47,11 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
      */
     private static final long TIME_TO_WAIT_BEFORE_NEXT_REQUEST = 500;
 
+    private static final String SEARCH_QUERY = "SEARCH_QUERY";
+    private static final String IMAGE_LIST = "IMAGE_LIST";
+    private static final String RECYCLER_VIEW_POSITION = "RECYCLER_VIEW_POSITION";
+    private static final String RECYCLER_VIEW_OFFSET = "RECYCLER_VIEW_OFFSET";
+
     private int mImageSize = 0;
     private int mImageSpacing = 0;
 
@@ -52,11 +59,14 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
     private ProgressBar mProgressBar = null;
     private View mGridLayout = null;
     private View mEmptyLayout = null;
-    private GridView mGridView = null;
+    private RecyclerView mRecyclerView = null;
     private TextView mNetworkError = null;
+    private String mLastSearch = null;
 
-    private GridViewAdapter mGridViewAdapter = null;
+    private RecyclerViewAdapter mRecyclerViewAdapter = null;
     private RequestHandler mRequestHandler = new RequestHandler();
+    private GridLayoutManager mGridLayoutManager = null;
+    private Images mImageResult = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,18 +79,36 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
 
         initializeViews();
 
-        mGridViewAdapter = new GridViewAdapter(this, R.layout.grid_item, new ArrayList<Pages>());
-        mGridView.setAdapter(mGridViewAdapter);
-
         if (!NetworkUtils.isConnected(this)) {
             showNetworkError();
+        }
+
+        // Orientation changed, then restore the last state
+        if (savedInstanceState != null) {
+            Utils.hideKeyboard(mSearchView, this);
+            mLastSearch = savedInstanceState.getString(SEARCH_QUERY);
+            mImageResult = (Images) savedInstanceState.getSerializable(IMAGE_LIST);
+            final int pos = savedInstanceState.getInt(RECYCLER_VIEW_POSITION);
+            final int offset = savedInstanceState.getInt(RECYCLER_VIEW_OFFSET);
+
+            onImagesReceived(mImageResult);
+
+            mRecyclerView.post(new Runnable() {
+                @Override
+                public void run() {
+                    mGridLayoutManager.scrollToPositionWithOffset(pos, offset);
+                }
+            });
         }
     }
 
     private void initializeViews() {
-        mGridView = (GridView) findViewById(R.id.grid_view);
-        mGridView.getViewTreeObserver().addOnGlobalLayoutListener(new GlobalLayoutListener());
-        mGridView.setOnItemClickListener(this);
+        mRecyclerView = (RecyclerView) findViewById(R.id.grid_view);
+        mRecyclerView.getViewTreeObserver().addOnGlobalLayoutListener(new GlobalLayoutListener());
+        mGridLayoutManager = new GridLayoutManager(this, 2);
+        mRecyclerView.hasFixedSize();
+        mRecyclerView.setLayoutManager(mGridLayoutManager);
+        mRecyclerView.addItemDecoration(new ImageItemDecoration(mImageSpacing));
 
         mSearchView = (EditText) findViewById(R.id.search_view);
         mSearchView.addTextChangedListener(mTextWatcher);
@@ -107,6 +135,14 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
         @Override
         public void afterTextChanged(Editable editable) {
             //LogUtil.d(TAG, "Text changed: " + editable.toString());
+
+            // Return if search query is same
+            if (mLastSearch != null) {
+                if (mLastSearch.equals(mSearchView.getText().toString())) {
+                    mSearchView.clearFocus();
+                    return;
+                }
+            }
 
             // Stop progress.
             stopProgress();
@@ -144,6 +180,9 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
 
                     // Cancel the previous request.
                     ControllerManager.getInstance().cancelRequest(mRequestId);
+
+
+                    mLastSearch = mSearchView.getText().toString();
 
                     // Initiate network request
                     SearchQuery searchQuery = new SearchQuery();
@@ -191,23 +230,30 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
         List<Pages> pages = Arrays.asList(qPages);
         Collections.sort(pages, new PageComparator());
 
-        mGridViewAdapter.setItems(pages);
-        mGridViewAdapter.notifyDataSetChanged();
+        mImageResult = images;
 
-        // Move grid view to top
-        mGridView.post(new Runnable() {
-            @Override
-            public void run() {
-                mGridView.smoothScrollToPosition(0);
-            }
-        });
+        if (mRecyclerViewAdapter == null) {
+            mRecyclerViewAdapter = new RecyclerViewAdapter(pages, this, this);
+            mRecyclerView.setAdapter(mRecyclerViewAdapter);
+        } else {
+            mRecyclerViewAdapter.setItems(pages);
+
+            // Move grid view to top
+            mRecyclerView.post(new Runnable() {
+                @Override
+                public void run() {
+                    mRecyclerView.scrollToPosition(0);
+                }
+            });
+
+        }
 
         showGridView();
     }
 
     @Override
-    public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-        Pages page = mGridViewAdapter.getItem(i);
+    public void onItemClick(int i) {
+        Pages page = mRecyclerViewAdapter.getItem(i);
         if (!page.hasValidThumnail()) {
             return;
         }
@@ -247,14 +293,21 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
 
         @Override
         public void onGlobalLayout() {
-            if (mGridViewAdapter.getNumColumns() == 0) {
-                int numColumns = (int) Math.floor(mGridView.getWidth() / (mImageSize + mImageSpacing));
-                if (numColumns > 0) {
-                    final int columnWidth = (mGridView.getWidth() / numColumns) - mImageSpacing;
-                    mGridViewAdapter.setNumColumns(numColumns);
-                    mGridViewAdapter.setItemHeight(columnWidth);
-                }
+            if (mRecyclerViewAdapter == null) {
+                return;
             }
+
+            int numColumns = (int) Math.floor(mRecyclerView.getWidth() / (mImageSize + mImageSpacing));
+            if (numColumns == 0) {
+                return;
+            }
+
+            final int columnWidth = (mRecyclerView.getWidth() / numColumns) - mImageSpacing;
+            mRecyclerViewAdapter.setNumColumns(numColumns);
+            mRecyclerViewAdapter.setItemHeight(columnWidth);
+
+            mGridLayoutManager.setSpanCount(numColumns);
+            mGridLayoutManager.requestLayout();
         }
     };
 
@@ -290,8 +343,11 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
     }
 
     public void onNoResultsFound() {
-        mGridViewAdapter.setItems(new ArrayList<Pages>());
-        mGridViewAdapter.notifyDataSetChanged();
+        mImageResult = null;
+
+        if (mRecyclerViewAdapter != null) {
+            mRecyclerViewAdapter.setItems(new ArrayList<Pages>());
+        }
 
         showEmptyView();
 
@@ -306,6 +362,12 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
     }
 
     @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        Utils.hideKeyboard(mSearchView, this);
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
 
@@ -314,5 +376,18 @@ public class HomeActivity extends AppCompatActivity implements AdapterView.OnIte
 
         // Cancel the previous request.
         ControllerManager.getInstance().cancelRequest(mRequestId);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // Save last state before orientation change
+        outState.putString(SEARCH_QUERY, mLastSearch);
+        outState.putSerializable(IMAGE_LIST, mImageResult);
+        outState.putInt(RECYCLER_VIEW_POSITION, mGridLayoutManager.findFirstVisibleItemPosition());
+        View view = mGridLayoutManager.findViewByPosition(mGridLayoutManager.findFirstVisibleItemPosition());
+        if (view != null) {
+            outState.putInt(RECYCLER_VIEW_OFFSET, view.getTop());
+        }
     }
 }

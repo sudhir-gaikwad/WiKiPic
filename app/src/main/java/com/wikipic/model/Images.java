@@ -3,7 +3,9 @@ package com.wikipic.model;
 import com.google.gson.annotations.SerializedName;
 import com.wikipic.com.wikipic.request.BaseErrorResponse;
 
-public class Images extends BaseErrorResponse {
+import java.io.Serializable;
+
+public class Images extends BaseErrorResponse implements Serializable{
 
     @SerializedName("query")
     private Query mQuery;
